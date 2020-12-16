@@ -1,8 +1,11 @@
-# Kafka Tutorial
+# Introduction to Fault Tolerance in Kafka With Experiments
 
-Apache Kafka is a distributed messaging system for event processing. Together with the growing traffic and features of modern application systems, the traditional method of maintaining a data lake for a pool of different logs and data becomes increasingly unfeasible due to its low maintainability. 
+Modern applications are composed of many small microservices, an architecture design which breaks down one application into a suite of independent deployable services (more more detail see [here](https://en.wikipedia.org/wiki/Microservices)). As the number of microservices components grow with increasing demand and complexity of the application, so does the scale of point to point data pipelines that connect different microservices. However, since the transfer of data between different services have completely different requirements and volume, these pipelines are very hard to maintain and scale.
 
-On contrast, Kafka reimagined modern application systems as various microservices producing and consuming "messages" instead of multiple separated and independent business layers. As a result, it successfully abstracts away the complicated details of data types and processing methods by generalizing them to "log messages" and builds a highly scalable and reliable distributed communication system for delivering the messages.
+![image](https://user-images.githubusercontent.com/30107576/102298055-4631fe80-3f05-11eb-8c6d-9f880683bd71.png)
+_Figure 1: An example of point-to-point data pipeline design with microservices_
+
+Apache Kafka is a distributed messaging system designed for solving the growing complexity problem in data pipelining between microservices. It provides an unified data-agnostic interface that builds around the concept of "logs". As a result, it successfully abstracts away the complicated details of data types and processing methods by generalizing them to "log messages" and builds a highly scalable and reliable distributed communication system for delivering the messages.
 
 ## Prerequisites
 Apache Kafka is based on Java. To compile and get Kafka up and running, we need to have JVMs installed in the system. If you don't have one, you could download
