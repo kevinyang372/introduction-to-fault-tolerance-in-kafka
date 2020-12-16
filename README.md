@@ -1,11 +1,20 @@
 # Introduction to Fault Tolerance in Kafka With Experiments
 
-Modern applications are composed of many small microservices, an architecture design which breaks down one application into a suite of independent deployable services (more more detail see [here](https://en.wikipedia.org/wiki/Microservices)). As the number of microservices components grow with increasing demand and complexity of the application, so does the scale of point to point data pipelines that connect different microservices. However, since the transfer of data between different services have completely different requirements and volume, these pipelines are very hard to maintain and scale.
+Modern applications are composed of many small microservices, an architecture design which breaks down one application into a suite of independent deployable services (more more detail see [here](https://en.wikipedia.org/wiki/Microservices)). As the number of microservices components grow with increasing demand and complexity of the application, so does the scale of point to point data pipelines that connect different microservices. For example, the backend recommendation system module may request information from various front-end components while in return front-end needs the results from the ML module to update its user interface. However, since the transfer of data between different services have completely different requirements and volume, these pipelines are very hard to maintain and scale.
 
-![image](https://user-images.githubusercontent.com/30107576/102298055-4631fe80-3f05-11eb-8c6d-9f880683bd71.png)
-_Figure 1: An example of point-to-point data pipeline design with microservices_
+![image](https://user-images.githubusercontent.com/30107576/102417968-aed6b500-3fb1-11eb-85f8-5b463b76beca.png)
+_Figure 1: An example of point-to-point data pipeline design with microservices._
 
-Apache Kafka is a distributed messaging system designed for solving the growing complexity problem in data pipelining between microservices. It provides an unified data-agnostic interface that builds around the concept of "logs". As a result, it successfully abstracts away the complicated details of data types and processing methods by generalizing them to "log messages" and builds a highly scalable and reliable distributed communication system for delivering the messages.
+Apache Kafka is a distributed messaging system designed for solving the growing complexity problem in data pipelining between microservices. It provides a unified data-agnostic interface that builds around the concept of "events." An event records the fact that "something happened" in the world or the application. Unlike the traditional conception of organizing data into tables, Kafka considers each event as an immutable truth. As a result, it successfully abstracts away the complicated details of data types and maintaining consistency, allowing the delivery service to be operated in a distributed fashion.
+
+![image](https://user-images.githubusercontent.com/30107576/102418077-e8a7bb80-3fb1-11eb-9368-7b18ac0312f5.png)
+_Figure 2: Using Apache Kafka for data delivery between microservices._
+
+Overtime, Apache Kafka has proven to be robust against various component and network failures thanks to its fault tolerance policies in place. In this tutorial, we are going to experiment with some of the real life failure scenarios locally and examine how Kafka handles each of them.
+
+## Key Components
+
+Before diving into the experiments, it is crucial to understand the overall structure and key components in Apache Kafka.  
 
 ## Prerequisites
 Apache Kafka is based on Java. To compile and get Kafka up and running, we need to have JVMs installed in the system. If you don't have one, you could download
