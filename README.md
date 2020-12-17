@@ -28,7 +28,14 @@ The __consumer__ is an application or service that receives events from Kafka. I
 
 __Brokers__ are units for storing Kafka events. Each broker contains multiple partitions from one or more topics but could only store one of the replicates from a particular partition. When a partition has multiple replicates, one broker will become the leader. Only leader broker could receive and service events. Users are able to scale Kafka in availability and fault tolerance by increasing the number of brokers and creating more replicates for every partition.
 
-The __Zookeeper__ monitors the status of each broker. In case of a component or network failure, Zookeeper is also responsible for facilitating a leader election and re-assigning the read and write traffic to the newly elected leader.
+The __Zookeeper__ is a consensus service that is used to monitor and coordinate the broker nodes in Apache Kafka. Due to its crucial role in Kafka's fault tolerance, Zookeeper is usually setup as a distributed system itself with one leader and multiple followers. It has three main responsibilities:
+* Detect the addition and removal of brokers and consumers
+* Rebalance the consumer and broker nodes when the number of brokers or consumers changes. It is mainly achieved by re-electing leaders for the affected partitions.
+
+To achieve those responsibilities, Zookeeper stores a list of different registries including:
+* Broker registry: The broker’s host name and part, and the set of topics and partitions stored on it.
+* Consumer registry: The consumer group to which a consumer belongs and the set of topics it subscribes to.
+* Ownership registry: A list of consumers currently consuming from a particular partition.
 
 A typical workflow in Kafka looks like the following:
 1) The producer commits a message to a specific event topic.
@@ -37,25 +44,21 @@ A typical workflow in Kafka looks like the following:
 
 ## Prerequisites
 Apache Kafka is based on Java. To compile and get Kafka up and running, we need to have JVMs installed in the system. If you don't have one, you could download
-it [here](https://www.oracle.com/java/technologies/javase-jdk15-downloads.html)
+it [here](https://www.oracle.com/java/technologies/javase-jdk15-downloads.html). Also notice that the following tutorial is written in the __Mac__ environment.
 
-Then check out this github repository for the config files and producer / consumer code. Install all the necessary dependencies for running the experiment:
+Then check out [this](https://github.com/kevinyang372/introduction-to-fault-tolerance-in-kafka) github repository for the config files and producer / consumer code. Install all the necessary dependencies for running the experiment:
 
     $ pip install -r requirements.txt
 
-Apache Kafka is supported and maintained by multiple organizations. We could download the most up-to-date version from 
-[Apache foundation](https://kafka.apache.org/downloads). Once downloaded, we first need to unzip and compile the package __within the local repository folder__.
+Apache Kafka is supported and maintained by multiple organizations. We could download all Kafka versions from 
+[Apache foundation](https://kafka.apache.org/downloads). For this tutorial, we are going to use __version 2.6.0__ and make sure to select the _binary downloads_ so we don't need to further compile the package. Once downloaded, we first need to unzip the package __within the local repository folder__.
 
 Unzip the package:
 
     $ tar -xf kafka-2.6.0-src.tgz
 
-Compile to binary if needed:
-
-    $ cd kafka-'version number'-src && ./gradlew jar -PscalaVersion=2.13.2
-
 ## Starting Kafka
-Kafka relies on [zookeeper](https://zookeeper.apache.org/) for managing all its broker nodes. So let's first get a zookeeper node up and running. Inside the unzipped kafka folder _(should be `kafka-'version number'-src`)_:
+Kafka relies on [zookeeper](https://zookeeper.apache.org/) for managing all its broker nodes. So let's first get a zookeeper node up and running. Inside the unzipped kafka folder _(should be `kafka-2.6.0-src`)_:
 
     $ bin/zookeeper-server-start.sh ../config/zookeeper.properties
     
@@ -76,7 +79,7 @@ log.dirs=../tmp/kafka-logs-(id)
 
 After confirming all the brokers have successfully been initiated, we also need to create topics for producers to deliver messages to:
 
-    $ bin/kafka-topics.sh --create --topic my-kafka-topic --zookeeper localhost:2181 --partitions 3 --replication-factor 2
+    $ bin/kafka-topics.sh --create --topic foo --zookeeper localhost:2181 --partitions 3 --replication-factor 2
     
 The `partitions` keyword decides the number of brokers you want your message to be split between. We chose three here as it is the number of broker nodes we brought up. The `replication-factor` tells Kafka how many times a message should be replicated. Setting it to two avoids losing the message immediately if the broker responsible for delivering accidentally goes down.
 
@@ -85,11 +88,17 @@ With Kafka up and running, we could start the producer and consumer that is curr
     $ python producer.py
     $ python consumer.py
 
-If you see the consumer process starts printing out log messages like below, congradulations you have successfully set up the Kafka system locally!
+If you see the consumer process starts printing out log messages like below, congradulations you have successfully set up the Kafka system locally! As discussed above, we could observe that messages with the same key value always go to the same partition.
 ```
-Consumed message from producer: ConsumerRecord(topic='foo', partition=1, offset=422457, timestamp=1605823820159, timestamp_type=0, key=None, value=b'1605823820.15889: message 5 from producer!', headers=[], checksum=None, serialized_key_size=-1, serialized_value_size=42, serialized_header_size=-1)
-Consumed message from producer: ConsumerRecord(topic='foo', partition=1, offset=422458, timestamp=1605823821162, timestamp_type=0, key=None, value=b'1605823821.1625652: message 6 from producer!', headers=[], checksum=None, serialized_key_size=-1, serialized_value_size=44, serialized_header_size=-1)
-Consumed message from producer: ConsumerRecord(topic='foo', partition=1, offset=422459, timestamp=1605823822167, timestamp_type=0, key=None, value=b'1605823822.167104: message 7 from producer!', headers=[], checksum=None, serialized_key_size=-1, serialized_value_size=43, serialized_header_size=-1)
+Consumed message from partition 2: 1608169242.4790661: message 3 with key foo_5 from producer!
+Consumed message from partition 1: 1608169243.481664: message 4 with key foo_4 from producer!
+Consumed message from partition 0: 1608169244.486679: message 5 with key foo_1 from producer!
+Consumed message from partition 2: 1608169245.487614: message 6 with key foo_2 from producer!
+Consumed message from partition 2: 1608169246.489738: message 7 with key foo_5 from producer!
+Consumed message from partition 0: 1608169247.495711: message 8 with key foo_1 from producer!
+Consumed message from partition 0: 1608169248.498251: message 9 with key foo_1 from producer!
+Consumed message from partition 0: 1608169249.501703: message 10 with key foo_1 from producer!
+Consumed message from partition 2: 1608169250.5059142: message 11 with key foo_5 from producer!
 ...
 ```
 
@@ -100,10 +109,12 @@ To check the configurations of the topic, you could run:
 For now, we should see that configuration to be something like this:
 ```
 Topic: foo	PartitionCount: 3	ReplicationFactor: 2	Configs:
-	Topic: foo	Partition: 0	Leader: 1	Replicas: 0,1	Isr: 1,0
-	Topic: foo	Partition: 1	Leader: 1	Replicas: 1,0	Isr: 1,0
-	Topic: foo	Partition: 2	Leader: 1	Replicas: 0,1	Isr: 1,0
+	Topic: foo	Partition: 0	Leader: 1	Replicas: 1,0	Isr: 1,0
+	Topic: foo	Partition: 1	Leader: 2	Replicas: 2,1	Isr: 2,1
+	Topic: foo	Partition: 2	Leader: 0	Replicas: 0,2	Isr: 0,2
 ```
+
+As both the producer and consumer code are wrapped in an infinite loop, to terminate any of the processes, you could use `CTRL C` to key interrupt the running Python program.
     
 ## Experiments
 It's time to mess up with the system. We designed three scenarios here for testing the level of fault tolerance Kafka has for component failures.
@@ -111,24 +122,26 @@ It's time to mess up with the system. We designed three scenarios here for testi
 #### Scenario 1: Shutting Down One Broker
 For this scenario, we shut down one out of the three broker nodes currently running. The system should continue to function correctly since we have two replications  for each message delivered. After acknowledging the broker failure, Kafka should be able to balance its load to the other two running nodes and avoid message loss.
 
-After shutting down one broker server:
+After shutting down one broker server with id = 2 (use `CTRL C` to terminate the process):
 ```
 ...
-Consumed message from producer: ConsumerRecord(topic='foo', partition=0, offset=423846, timestamp=1605831903319, timestamp_type=0, key=None, value=b'1605831903.319744: message 46 from producer!', headers=[], checksum=None, serialized_key_size=-1, serialized_value_size=44, serialized_header_size=-1)
-Consumed message from producer: ConsumerRecord(topic='foo', partition=0, offset=423847, timestamp=1605831904322, timestamp_type=0, key=None, value=b'1605831904.322156: message 47 from producer!', headers=[], checksum=None, serialized_key_size=-1, serialized_value_size=44, serialized_header_size=-1)
-Consumed message from producer: ConsumerRecord(topic='foo', partition=2, offset=422961, timestamp=1605831905324, timestamp_type=0, key=None, value=b'1605831905.324097: message 48 from producer!', headers=[], checksum=None, serialized_key_size=-1, serialized_value_size=44, serialized_header_size=-1)
+Consumed message from partition 2: 1608169579.229342: message 22 with key foo_5 from producer!
+Consumed message from partition 2: 1608169580.2330618: message 23 with key foo_2 from producer!
+Consumed message from partition 0: 1608169581.235913: message 24 with key foo_1 from producer!
+Consumed message from partition 0: 1608169582.242093: message 25 with key foo_1 from producer!
+Consumed message from partition 2: 1608169583.247047: message 26 with key foo_3 from producer!
 ...
 ```
 
 The topic configuration now looks like:
 ```
 Topic: foo	PartitionCount: 3	ReplicationFactor: 2	Configs:
-	Topic: foo	Partition: 0	Leader: 0	Replicas: 0,1	Isr: 0
-	Topic: foo	Partition: 1	Leader: 0	Replicas: 1,0	Isr: 0
-	Topic: foo	Partition: 2	Leader: 0	Replicas: 0,1	Isr: 0
+	Topic: foo	Partition: 0	Leader: 1	Replicas: 1,0	Isr: 1,0
+	Topic: foo	Partition: 1	Leader: 1	Replicas: 2,1	Isr: 1
+	Topic: foo	Partition: 2	Leader: 0	Replicas: 0,2	Isr: 0
 ```
 
-Kafka automatically reassigns a new leader, preventing the entire system to come to a failover. When we boot server back, it will automatically start a fetcher to recover its up-to-date log from the leader:
+As we can see, for partitions with replicas on broker 2, now the in-sync replica (ISR) factor excludes broker 2 as it is curently shut-down. At the same time, we could still read messages from all three partitions from the consumer side. This is because after identifying the component failure, Kafka automatically re-assigns a new leader for partition 1, preventing the entire system to come to a failover. When we boot server back, it will automatically start a fetcher to recover its up-to-date log from the leader:
 ```
 [2020-11-19 17:01:34,673] INFO [Partition foo-0 broker=1] Log loaded for partition foo-0 with initial high watermark 423887 (kafka.cluster.Partition)
 [2020-11-19 17:01:34,674] INFO [Partition foo-2 broker=1] Log loaded for partition foo-2 with initial high watermark 422998 (kafka.cluster.Partition)
@@ -139,32 +152,88 @@ Kafka automatically reassigns a new leader, preventing the entire system to come
 ```
 
 #### Scenario 2: Shutting Down Two Brokers
-Now let's try shutting down one more server, bringing the total number of brokers alive to one. Kafka should not be able to continue delivering messages as we specified a replication factor that is greater than the number of brokers and each replication should live in a different broker instance. As specified in the documentation: `For a topic with replication factor N, we will tolerate up to N-1 server failures without losing any messages committed to the log.`
+Now let's try shutting down one more server, bringing the total number of brokers alive to one. Kafka should not be able to fully deliver all messages as we specified a replication factor that is greater than the number of brokers and each replication should live in a different broker instance. As specified in the documentation: `For a topic with replication factor N, we will tolerate up to N-1 server failures without losing any messages committed to the log.`
 
-In the experiment, we found that when two brokers are shut down, the consumer simply stops to receive any message from the producer.
+In the experiment, we found that when two brokers are shut down, Kafka is no longer able to assign any leader to partition 1 as shown below.
 ```
 Topic: foo	PartitionCount: 3	ReplicationFactor: 2	Configs:
-	Topic: foo	Partition: 0	Leader: none	Replicas: 0,1	Isr: 0
-	Topic: foo	Partition: 1	Leader: none	Replicas: 1,0	Isr: 0
-	Topic: foo	Partition: 2	Leader: none	Replicas: 0,1	Isr: 0
+	Topic: foo	Partition: 0	Leader: 0	Replicas: 1,0	Isr: 0
+	Topic: foo	Partition: 1	Leader: none	Replicas: 2,1	Isr: 1
+	Topic: foo	Partition: 2	Leader: 0	Replicas: 0,2	Isr: 0
 ```
 
-However, the system could quickly comes back to operation once the two brokers are rebooted. All the logs that are produced in the period of server failover will be lost:
+While Kafka is still able to deliver messages that are in partition 0 and 2, it will fail to deliver message to partition 1 -- which currently has no leader nodes. From the producer side, we are able to see failed confirmations:
 ```
-Consumed message from producer: ConsumerRecord(topic='foo', partition=1, offset=422787, timestamp=1605834836110, timestamp_type=0, key=None, value=b'1605834836.1103349: message 242 from producer!', headers=[], checksum=None, serialized_key_size=-1, serialized_value_size=46, serialized_header_size=-1)
-Consumed message from producer: ConsumerRecord(topic='foo', partition=1, offset=422788, timestamp=1605834875232, timestamp_type=0, key=None, value=b'1605834875.232121: message 281 from producer!', headers=[], checksum=None, serialized_key_size=-1, serialized_value_size=45, serialized_header_size=-1)
+Successfully produced 1608170527.6380339: message 7 with key foo_3 from producer!!
+Successfully produced 1608170528.6459231: message 8 with key foo_4 from producer!!
+Failed to deliver 1608170529.6546838: message 9 with key foo_1 from producer!
+Successfully produced 1608170530.762963: message 10 with key foo_5 from producer!!
+```
+
+On the consumer side, message 9 is indeed lost and not captured by the consumer:
+```
+Consumed message from partition 2: 1608170527.6380339: message 7 with key foo_3 from producer!
+Consumed message from partition 2: 1608170528.6459231: message 8 with key foo_4 from producer!
+Consumed message from partition 2: 1608170530.762963: message 10 with key foo_5 from producer!
+```
+
+All lost messages during the shut-down is not recoverable. However, the system could quickly comes back to operation once the two brokers are rebooted. Zookeeper is able to re-assign the leader to each partition:
+```
+Topic: foo	PartitionCount: 3	ReplicationFactor: 2	Configs:
+	Topic: foo	Partition: 0	Leader: 1	Replicas: 1,0	Isr: 0,1
+	Topic: foo	Partition: 1	Leader: 2	Replicas: 2,1	Isr: 1,2
+	Topic: foo	Partition: 2	Leader: 0	Replicas: 0,2	Isr: 0,2
 ```
 
 #### Scenario 3: Shutting Down Zookeeper
-Zookeeper is responsible for keeping track of the status of the broker nodes and electing a new leader if the leader node fails. Therefore, shutting down the zookeeper node should not cause problem if all the broker nodes are up and running. However, it comes at a risk of systematic failover if some Kafka broker node fails without the recovery mechanism from zookeeper.
+Zookeeper is responsible for keeping track of the status of the broker nodes and electing a new leader if the leader node fails. Therefore, shutting down the Zookeeper node should not cause problem if all the broker nodes are up and running. However, it comes at a risk of systematic failover if some Kafka broker node fails without the recovery mechanism from Zookeeper.
 
-After shutting down the zookeeper, as expected, the messages are still being delivered between the producer and consumer. An interesting observation is that now we are not able to shut down the broker nodes gracefully (with `CTRL C`) as it couldn't discover the zookeeper:
+After shutting down the Zookeeper, we could no longer access some key information to the system like the leader node of partitions and availability of all the nodes. This means if any of the brokers goes down, Kafka could come to a completely failover as Zookeeper could not help rebalance the traffic to the shut-down node and notify the corresponding producers and consumers. However, if none of the brokers go down at the duration of Zookeeper shut-down, Kafka should still function normally since the producers and consumers could remain their connection with the assigned brokers.
+
+In the experiment, we could see that the messages are still being delivered between the producer and consumer. An interesting observation is that now we are not able to shut down the broker nodes gracefully (with `CTRL C`) as it couldn't discover the Zookeeper:
 ```
-[2020-11-19 17:30:37,383] INFO Opening socket connection to server localhost/127.0.0.1:2181. Will not attempt to authenticate using SASL (unknown error) (org.apache.zookeeper.ClientCnxn)
-[2020-11-19 17:30:37,385] INFO Socket error occurred: localhost/127.0.0.1:2181: Connection refused (org.apache.zookeeper.ClientCnxn)
+[2020-12-16 18:36:43,600] INFO Terminating process due to signal SIGINT (org.apache.kafka.common.utils.LoggingSignalHandler)
+[2020-12-16 18:36:43,602] INFO [KafkaServer id=1] shutting down (kafka.server.KafkaServer)
+[2020-12-16 18:36:43,603] INFO [KafkaServer id=1] Starting controlled shutdown (kafka.server.KafkaServer)
+[2020-12-16 18:36:43,691] INFO Opening socket connection to server localhost/[0:0:0:0:0:0:0:1]:2181. Will not attempt to authenticate using SASL (unknown error) (org.apache.zookeeper.ClientCnxn)
+[2020-12-16 18:36:43,691] INFO Socket error occurred: localhost/[0:0:0:0:0:0:0:1]:2181: Connection refused (org.apache.zookeeper.ClientCnxn)
+[2020-12-16 18:36:43,798] INFO [ZooKeeperClient Kafka server] Waiting until connected. (kafka.zookeeper.ZooKeeperClient)
 ```
 
-Once we put zookeeper back into operation, we could see that the messaging system will recovery immediately.
+Once we put the Zookeeper back into operation, we could see that the messaging system will recovery immediately as the heartbeat confirmation with the Zookeeper returns successfully for the brokers. Now the Zookeeper rediscovers all the broker node and could continue to perform its role.
+```
+[2020-12-16 18:35:21,274] INFO Opening socket connection to server localhost/127.0.0.1:2181. Will not attempt to authenticate using SASL (unknown error) (org.apache.zookeeper.ClientCnxn)
+[2020-12-16 18:35:21,274] INFO Socket error occurred: localhost/127.0.0.1:2181: Connection refused (org.apache.zookeeper.ClientCnxn)
+[2020-12-16 18:35:23,304] INFO Opening socket connection to server localhost/[0:0:0:0:0:0:0:1]:2181. Will not attempt to authenticate using SASL (unknown error) (org.apache.zookeeper.ClientCnxn)
+[2020-12-16 18:35:23,305] INFO Socket connection established, initiating session, client: /[0:0:0:0:0:0:0:1]:56830, server: localhost/[0:0:0:0:0:0:0:1]:2181 (org.apache.zookeeper.ClientCnxn)
+[2020-12-16 18:35:23,314] INFO Session establishment complete on server localhost/[0:0:0:0:0:0:0:1]:2181, sessionid = 0x10005a515a40000, negotiated timeout = 18000 (org.apache.zookeeper.ClientCnxn)
+```
+
+## Extended Scenario: Adjusting Minimum In-Sync Replicas
+To address a wide range of use cases, Apache Kafka offers several parameters for users to adjust whether they want to optimize for accessibility or consistency. One of them is `minimum in-sync replica` -- the minimum number of replicas that need to be synced up for Kafka to acknowledge that a message has been successfully synced. Increasing this parameter could improve the consistency of the system by reducing the risk of failure over all of the replicas but comes at a cost of lower availability.
+
+We could change the minimum in-sync replica value by running the following command. The `--alter` parameter allows us to update the configuration without restarting the Zookeeper:
+
+	$ bin/kafka-topics.sh --alter --zookeeper localhost:2181 --topic foo --config min.insync.replicas=2
+	
+Now, taking one server down, we could see that the producer side fails to confirm the delivery on many messages as the partition they belong to could not be replicated to enough brokers.
+```
+Successfully produced 1608173354.485804: message 1466 with key foo_2 from producer!!
+Failed to deliver 1608173355.489635: message 1467 with key foo_3 from producer!
+Successfully produced 1608173356.5009768: message 1468 with key foo_1 from producer!!
+Failed to deliver 1608173357.505478: message 1469 with key foo_3 from producer!
+Failed to deliver 1608173358.5097501: message 1470 with key foo_2 from producer!
+Failed to deliver 1608173359.516491: message 1471 with key foo_2 from producer!
+```
+
+And the consumer on the other side also fails to receive the corresponding messages:
+```
+Consumed message from partition 2: 1608173354.485804: message 1466 with key foo_2 from producer!
+Consumed message from partition 0: 1608173356.5009768: message 1468 with key foo_1 from producer!
+Consumed message from partition 0: 1608173372.601995: message 1484 with key foo_1 from producer!
+Consumed message from partition 0: 1608173389.712647: message 1501 with key foo_1 from producer!
+Consumed message from partition 0: 1608173392.7440279: message 1504 with key foo_1 from producer
+```
 
 ## CAP
 The CAP theorem states that we could move in either of the two directions when configuring a distributed system:
