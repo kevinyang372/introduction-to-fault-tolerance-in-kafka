@@ -64,11 +64,28 @@ Kafka relies on [Zookeeper](https://zookeeper.apache.org/) for managing all its 
 
     $ bin/zookeeper-server-start.sh ../config/zookeeper.properties
     
-Now we could initiate the broker nodes which are the heart of the Kafka system for delivering messages. To showcase the distributed nature of Kafka, we are going to start three broker nodes:
+You can verify that Zookeeper has been successfully set up if the following output has been given by the running process:
+```
+[2020-12-17 15:26:31,761] INFO Snapshotting: 0x10c to /tmp/zookeeper/version-2/snapshot.10c (org.apache.zookeeper.server.persistence.FileTxnSnapLog)
+[2020-12-17 15:26:31,776] INFO Using checkIntervalMs=60000 maxPerMinute=10000 (org.apache.zookeeper.server.ContainerManager)
+[2020-12-17 15:26:41,016] INFO Creating new log file: log.10d (org.apache.zookeeper.server.persistence.FileTxnLog)
+```
+
+_Note that if you encountered the error `The Cluster ID ... doesn't match stored clusterId ... in meta.properties. The broker is trying to join the wrong cluster`, it is because you have restarted Zookeeper but the new process is configured by old cache from the previous run. To fix the error, delete the tmp folder in the root of local repository folder and restart Zookeeper._
+    
+Now we could initiate the broker nodes which are the heart of the Kafka system for delivering messages. To showcase the distributed nature of Kafka, we are going to start three broker nodes. Each node needs to be initialized in a separate tab. You could use `CTRL T` to create a new tab in commandline:
     
     $ bin/kafka-server-start.sh ../config/server.0.properties
     $ bin/kafka-server-start.sh ../config/server.1.properties
     $ bin/kafka-server-start.sh ../config/server.2.properties
+
+You can verify that the brokers have been successfully set up if the following output has been given by the running process:
+```
+[2020-12-17 15:26:42,794] INFO Kafka version: 2.6.0 (org.apache.kafka.common.utils.AppInfoParser)
+[2020-12-17 15:26:42,794] INFO Kafka commitId: unknown (org.apache.kafka.common.utils.AppInfoParser)
+[2020-12-17 15:26:42,794] INFO Kafka startTimeMs: 1608247602790 (org.apache.kafka.common.utils.AppInfoParser)
+[2020-12-17 15:26:42,795] INFO [KafkaServer id=0] started (kafka.server.KafkaServer)
+```
 
 Feel free to setup more broker nodes if needed. You could create additional ones by copying the server properties file and modifying the following sections:
 ```
@@ -83,7 +100,7 @@ After confirming all the brokers have successfully been initiated, we also need 
 
     $ bin/kafka-topics.sh --create --topic foo --zookeeper localhost:2181 --partitions 3 --replication-factor 2
     
-The `partitions` keyword decides the number of brokers you want your message to be split between. We chose three here as it is the number of broker nodes we brought up. If you brought up more broker nodes in the previous step, you could increase the number of partitions to match the number of broker nodes. The `replication-factor` tells Kafka how many times a message should be replicated. Setting it to two avoids losing the message immediately if the leader broker accidentally goes down.
+The `partitions` keyword decides the number of brokers you want your message to be split between. We chose three here as it is the number of broker nodes we brought up. If you brought up more broker nodes in the previous step, you could increase the number of partitions to match the number of broker nodes. The `replication-factor` tells Kafka how many times a message should be replicated. Setting it to two avoids losing the message immediately if the leader broker accidentally goes down. You can verify that the topic has been created if the process ends with outputing `Created topic foo.`
 
 With Kafka up and running, we could start the producer and consumer that is currently just delivering simple dummy texts. Run the following code __in the root directory of the repository__:
     
@@ -202,7 +219,9 @@ In the experiment, we could see that the messages are still being delivered betw
 [2020-12-16 18:36:43,798] INFO [ZooKeeperClient Kafka server] Waiting until connected. (kafka.zookeeper.ZooKeeperClient)
 ```
 
-Once we put the Zookeeper back into operation, we could see that the messaging system will recovery immediately as the heartbeat confirmation with the Zookeeper returns successfully for the brokers. Now the Zookeeper rediscovers all the broker node and could continue to perform its role.
+Furthermore, running commands to create a new topic or check the partition and topic configuration will neither execute nor terminate as we could not get in contact with Zookeeper.
+
+Once we put Zookeeper back into operation, we could see that the messaging system will recovery immediately as the heartbeat confirmation with the Zookeeper returns successfully for the brokers. Now the Zookeeper rediscovers all the broker node and could continue to perform its role.
 ```
 [2020-12-16 18:35:21,274] INFO Opening socket connection to server localhost/127.0.0.1:2181. Will not attempt to authenticate using SASL (unknown error) (org.apache.zookeeper.ClientCnxn)
 [2020-12-16 18:35:21,274] INFO Socket error occurred: localhost/127.0.0.1:2181: Connection refused (org.apache.zookeeper.ClientCnxn)
