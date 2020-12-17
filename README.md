@@ -12,9 +12,28 @@ _Figure 2: Using Apache Kafka for data delivery between microservices._
 
 Overtime, Apache Kafka has proven to be robust against various component and network failures thanks to its fault tolerance policies in place. In this tutorial, we are going to experiment with some of the real life failure scenarios locally and examine how Kafka handles each of them.
 
+## Partitions and Topics
+
+One potentially confusing aspect in Kafka is the distinguishment between partitions and topics. From a high-level perspective, the topic represents the category of a specific event. In practice, topics as to events could be thought of as tables as to databases -- it is a means of classifying data for services to know which events they should consume. When producing events for Kafka, it is required to specify the topic each one of them belongs.
+
+Topics are further split into partitions. While creating a topic, one can specify the number of partitions in a topic. Partition is the key to parallelization in Kafka as events could be consumed from different partitions within the same topic simultaneously. However, it is also worth noticing that orders are not maintained across different partitions -- therefore, one should always assign events requiring in-order processing to one partition.
+
 ## Key Components
 
-Before diving into the experiments, it is crucial to understand the overall structure and key components in Apache Kafka.  
+Before diving into the experiments, it is crucial first to understand the overall structure of the system. Apache Kafka consists of four key components: producers, consumers, brokers, and Zookeeper.
+
+The __producer__ is an application or service that writes events to Kafka. The client library for producers will specify the topic (provided by the application) and partition (provided or automatically generated) to commit the event to. Optionally, the application could assign a key value for each event: events with the same key will always go to the same partition as long as the number of partitions remains unchanged.
+
+The __consumer__ is an application or service that receives events from Kafka. Individual consumers could be grouped into __consumer groups__. Within each consumer group, one consumer will read events from a set of partitions. However, messages in one partition will only be consumed once by one single consumer group.
+
+__Brokers__ are units for storing Kafka events. Each broker contains multiple partitions from one or more topics but could only store one of the replicates from a particular partition. When a partition has multiple replicates, one broker will become the leader. Only leader broker could receive and service events. Users are able to scale Kafka in availability and fault tolerance by increasing the number of brokers and creating more replicates for every partition.
+
+The __Zookeeper__ monitors the status of each broker. In case of a component or network failure, Zookeeper is also responsible for facilitating a leader election and re-assigning the read and write traffic to the newly elected leader.
+
+A typical workflow in Kafka looks like the following:
+1) The producer commits a message to a specific event topic.
+2) The message is then recorded and appended to a partition in the brokers.
+3) The active consumers subscribed to the partition will consume the message.  
 
 ## Prerequisites
 Apache Kafka is based on Java. To compile and get Kafka up and running, we need to have JVMs installed in the system. If you don't have one, you could download
